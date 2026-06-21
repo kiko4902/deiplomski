@@ -31,7 +31,7 @@ def main():
     use_smote = sys.argv[1:] if len(sys.argv) > 1 else SMOTE_ALL
     use_classifiers = CLASSIFIERS_FAST
     k_vals = SMOTE_K_VALUES
-    skip_datasets = {"breast_cancer", "wine", "iris"}  # vec gotovi, trivijalni IR
+    skip_datasets = set()
 
     print("=" * 60)
     print("  SMOTE Experimental Analysis — 5.2")
@@ -52,11 +52,12 @@ def main():
 
     n_k_baseline = sum(1 for s in use_smote if s in BASELINE_ALL)
     n_k_smote = len(use_smote) - n_k_baseline
+    n_undersampling = sum(1 for s in use_smote if s.startswith("NearMiss") or s in ("TomekLinks", "ENN"))
     expected_rows = (n_k_smote * len(k_vals) + n_k_baseline * 1) * len(use_classifiers) * (len(datasets) - len(skip_datasets)) * len(METRICS)
 
     from config import CV_FOLDS, CV_REPEATS
     print(f"\n[3] Running experiments...")
-    print(f"    SMOTE variants: {len(use_smote)} ({n_k_smote} SMOTE + {n_k_baseline} baseline)")
+    print(f"    Total methods:  {len(use_smote)} ({n_k_smote - n_undersampling} SMOTE + {n_undersampling} undersampling + {n_k_baseline} baseline)")
     print(f"    Classifiers:    {len(use_classifiers)} ({', '.join(use_classifiers)})")
     print(f"    k values:       {k_vals}")
     print(f"    CV:             {CV_FOLDS}-fold x {CV_REPEATS} repeats = {CV_FOLDS * CV_REPEATS} fits/comb")

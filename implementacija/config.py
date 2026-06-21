@@ -9,7 +9,7 @@ METRICS = ["f1", "g_mean", "auc_roc", "auc_pr", "balanced_accuracy", "mcc", "f2"
 CLASSIFIER_NAMES = ["dt", "rf", "xgboost", "lr", "svm", "knn", "gnb", "mlp"]
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-RESULTS_DIR = os.path.join(BASE_DIR, "results")
+RESULTS_DIR = r"F:\results"
 RAW_DIR = os.path.join(RESULTS_DIR, "raw")
 TABLES_DIR = os.path.join(RESULTS_DIR, "tables")
 FIGURES_DIR = os.path.join(RESULTS_DIR, "figures")

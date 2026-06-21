@@ -3,15 +3,21 @@ import numpy as np
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(__file__))
 sys.stdout.reconfigure(encoding='utf-8')
 
-RAW = os.path.join(os.path.dirname(__file__), 'results', 'raw')
+from config import RAW_DIR
+RAW = RAW_DIR
 
 datasets = {}
-for f in ['breast_cancer', 'wine', 'iris', 'ecoli']:
-    path = os.path.join(RAW, f'results_{f}.csv')
-    df = pd.read_csv(path)
-    datasets[f] = df
+for fname in sorted(os.listdir(RAW)):
+    if fname.startswith("results_") and fname.endswith(".csv"):
+        ds_name = fname[len("results_"):-4]
+        path = os.path.join(RAW, fname)
+        df = pd.read_csv(path)
+        datasets[ds_name] = df
+        print(f"Loaded {ds_name}")
+print()
 
 METRICS = ['f1', 'g_mean', 'auc_roc', 'auc_pr', 'balanced_accuracy', 'mcc', 'f2']
 all_dfs = pd.concat(datasets.values())

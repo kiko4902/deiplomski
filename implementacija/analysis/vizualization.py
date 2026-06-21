@@ -71,7 +71,7 @@ def plot_cd_diagram(df, metric="f1", save=True):
         n_algos = rank_matrix.shape[1]
 
         from scipy.stats import studentized_range
-        q_alpha = studentized_range.ppf(0.95, n_algos, np.inf)
+        q_alpha = studentized_range.ppf(0.95, n_algos, (n_datasets - 1) * (n_algos - 1))
         cd = q_alpha * np.sqrt(n_algos * (n_algos + 1) / (6 * n_datasets))
 
         fig, ax = plt.subplots(figsize=(10, 4))

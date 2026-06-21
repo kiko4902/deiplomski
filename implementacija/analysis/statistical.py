@@ -141,10 +141,18 @@ def run_all_statistical_tests(metric="f1", baseline="SMOTE"):
             sig = "***" if res["p_value"] < 0.001 else "**" if res["p_value"] < 0.01 else "*" if res["p_value"] < 0.05 else ""
             print(f"  {algo:25s}  p={res['p_value']:.4f} {sig}")
 
+    wilcox_base = wilcoxon_vs_baseline(df, metric, "NoOversampling")
+    if wilcox_base:
+        print(f"\nWilcoxon vs NoOversampling:")
+        for algo, res in sorted(wilcox_base.items()):
+            sig = "***" if res["p_value"] < 0.001 else "**" if res["p_value"] < 0.01 else "*" if res["p_value"] < 0.05 else ""
+            print(f"  {algo:25s}  p={res['p_value']:.4f} {sig}")
+
     # Save all tables
     save_ranking_table(df, metric)
     save_pvalue_table(posthoc)
     save_wilcoxon_table(wilcox, baseline)
+    save_wilcoxon_table(wilcox_base, "NoOversampling", filename="wilcoxon_vs_nooversampling.tex")
 
     return stat, p_val, posthoc, wilcox
 
