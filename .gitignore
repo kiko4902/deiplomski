@@ -26,6 +26,9 @@ env/
 # Results (generated)
 results/
 
+# Logovi
+run_log*.txt
+
 # Debug files
 debug*.txt
 debug*.html

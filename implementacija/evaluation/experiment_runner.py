@@ -12,6 +12,9 @@ from classifiers.defaults import get_classifier
 SMOTE_VARIANTS = {}
 
 
+BASELINE_NAMES = {"NoOversampling", "RandomOversampling", "RandomUndersampling", "WGAN"}
+
+
 def _register_smote_variants():
     from smote_variants.smote import SMOTE
     from smote_variants.borderline import BorderlineSMOTE
@@ -23,8 +26,21 @@ def _register_smote_variants():
     from smote_variants.g_smote import GeometricSMOTE
     from smote_variants.random_smote import RandomSMOTE
     from smote_variants.polynom_fit import PolynomFitSMOTE
+    from smote_variants.baselines import (
+        NoOversampling,
+        RandomOversampling,
+        RandomUndersampling,
+    )
+    from smote_variants.undersampling import (
+        NearMiss1,
+        NearMiss2,
+        NearMiss3,
+        TomekLinks,
+        ENN,
+    )
+    from smote_variants.gan import WGAN
 
-    return {
+    variants = {
         "SMOTE": SMOTE,
         "Borderline-SMOTE1": lambda **kw: BorderlineSMOTE(kind="BS1", **kw),
         "Borderline-SMOTE2": lambda **kw: BorderlineSMOTE(kind="BS2", **kw),
@@ -37,7 +53,17 @@ def _register_smote_variants():
         "G-SMOTE": GeometricSMOTE,
         "Random-SMOTE": RandomSMOTE,
         "PolynomFit-SMOTE": PolynomFitSMOTE,
+        "NoOversampling": NoOversampling,
+        "RandomOversampling": RandomOversampling,
+        "RandomUndersampling": RandomUndersampling,
+        "NearMiss-1": NearMiss1,
+        "NearMiss-2": NearMiss2,
+        "NearMiss-3": NearMiss3,
+        "TomekLinks": TomekLinks,
+        "ENN": ENN,
+        "WGAN": WGAN,
     }
+    return variants
 
 
 def run_experiment(X, y, dataset_name, classifier_names=None, smote_names=None, k_values=None):
@@ -53,7 +79,8 @@ def run_experiment(X, y, dataset_name, classifier_names=None, smote_names=None, 
 
     for smote_name in smote_names:
         smote_cls = variants[smote_name]
-        for k_val in k_values:
+        k_loop = [0] if smote_name in BASELINE_NAMES else k_values
+        for k_val in k_loop:
             for clf_name in classifier_names:
                 print(f"  {dataset_name} | {smote_name} (k={k_val}) | {clf_name}", end="", flush=True)
 

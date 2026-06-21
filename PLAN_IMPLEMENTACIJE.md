@@ -517,3 +517,135 @@ results/
     ├── heatmap_alg_dataset.pdf
     └── scatter_synthetic_*.pdf   # Scatter prikazi za web sučelje
 ```
+
+---
+
+## 6. Eksperimentalni blokovi (ažurirano)
+
+### 6.1. Blok 5.2 — SMOTE analiza (JEZGRA RADA)
+
+Samostalan blok koji pokriva naslov diplomskog rada. Uspoređuje sve metode
+resampliranja na istom evaluacijskom okviru.
+
+**Metode (20):**
+
+| Kategorija | Metode | k-vrijednosti |
+|---|---|---|
+| SMOTE oversampling (12) | SMOTE, Borderline-SMOTE1, Borderline-SMOTE2, ADASYN, SafeLevel-SMOTE, KMeans-SMOTE, SVM-SMOTE, SMOTE-ENN, SMOTE-Tomek, G-SMOTE, Random-SMOTE, PolynomFit-SMOTE | {3, 5, 7, 10} |
+| Undersampling (5) | NearMiss-1, NearMiss-2, NearMiss-3, TomekLinks (standalone), ENN (standalone) | {3, 5, 7, 10} |
+| Baseline (3) | NoOversampling, RandomOversampling, RandomUndersampling | {0} (jednom) |
+
+**Pokretanje:**
+```bash
+python run_analysis.py
+```
+
+**Output:** `results/raw/results_{dataset}.csv` — jedan CSV po datasetu.
+
+---
+
+### 6.2. Blok 5.3 — Usporedba paradigmi (PROŠIRENJE)
+
+Odvojeni eksperiment koji uspoređuje tri paradigme:
+- **Data-level:** WGAN oversampling
+- **Algorithm-level:** class_weight='balanced' klasifikatori (bez augmentacije)
+- **Hybrid:** WGAN + class_weight
+
+**Arhitektura:**
+- `evaluation/experiment_runner_53.py` — fokusirani runner (ne grid, nego parovi)
+- `run_analysis_53.py` — glavna skripta za 5.3
+- `smote_variants/gan.py` — WGAN-GP implementacija (PyTorch)
+- `classifiers/defaults.py` — `get_classifier("rf_weighted")` i sl.
+
+**Fokusirane usporedbe:**
+```
+Baseline (none)       + RF      → referentna točka
+Baseline (none)       + RF_w    → algorithm-level (class_weight)
+SMOTE                 + RF      → data-level (najbolji iz 5.2)
+WGAN                  + RF      → data-level (moderno)
+WGAN                  + RF_w    → hybrid
+```
+
+**Pokretanje:**
+```bash
+python run_analysis_53.py
+```
+
+**Output:** `results/raw/exp_53/results_53_{dataset}.csv`
+
+**Napomena:** WGAN zahtijeva PyTorch. Na nekim Windows/Python 3.12
+konfiguracijama DLL učitavanje pada — rješenje: `import torch` prije svega
+ostalog ili pokretanje izvan pytest-a. WGAN testovi su označeni `@pytest.mark.skip`.
+
+---
+
+### 6.3. Trenutni status testova
+
+90 passed, 5 skipped (WGAN) = **95 collected** (svibanj 2026)
+
+| Datoteka | Testova | Status |
+|---|---|---|
+| `test_metrics.py` | 4 | svi prolaze |
+| `test_pipeline.py` | 6 | svi prolaze (uklj. weighted classifiers) |
+| `test_smote_variants.py` | 85+5 | 85 prolaze, 5 WGAN skipped |
+
+---
+
+### 6.4. Nove datoteke (od Faze 5.2-5.3)
+
+```
+smote_variants/
+├── baselines.py          # NoOversampling, RandomOversampling, RandomUndersampling
+├── undersampling.py      # NearMiss-1/2/3, TomekLinks, ENN (standalone)
+└── gan.py                # WGAN-GP (lazy PyTorch import)
+
+evaluation/
+├── experiment_runner.py      # Ažuriran: registrira svih 21 metoda
+└── experiment_runner_53.py   # Novi: fokusirani runner za 5.3
+
+classifiers/
+└── defaults.py           # Ažuriran: get_classifier("rf_weighted") i sl.
+
+web_app/app.py            # Ažuriran: dodani WGAN, undersampling, baselines
+run_analysis_53.py        # Novi: glavna skripta za eksperiment 5.3
+data/make_dataset.py      # Novi: učitavanje 11 realnih datasetova s metapodacima
+```
+
+---
+
+### 6.5. Datasetovi — realni i sintetički
+
+Eksperimenti su podijeljeni u dvije jasno odvojene grupe.
+
+#### Realni datasetovi (11) — učitavaju se kroz `data/make_dataset.py`
+
+| Dataset | Izvor | n | d | IR | Sep. F1 |
+|---|---|---|---|---|---|
+| breast_cancer | sklearn | 569 | 30 | 1.7 | 0.98 |
+| iris | sklearn | 150 | 4 | 2.0 | 1.00 |
+| wine | sklearn | 178 | 13 | 2.7 | 0.96 |
+| ecoli | imbalanced-learn | 336 | 7 | 8.6 | 0.57 |
+| optical_digits | imbalanced-learn | 5620 | 64 | 9.1 | 0.83 |
+| satimage | imbalanced-learn | 6435 | 36 | 9.3 | 0.03 |
+| abalone | imbalanced-learn | 4177 | 10 | 9.7 | 0.01 |
+| us_crime | imbalanced-learn | 1994 | 100 | 12.3 | 0.49 |
+| libras_move | imbalanced-learn | 360 | 90 | 14.0 | 0.65 |
+| wine_quality | imbalanced-learn | 4898 | 11 | 25.8 | 0.08 |
+| yeast_me2 | imbalanced-learn | 1484 | 8 | 28.1 | 0.26 |
+
+*Sep. F1 = F1 logističke regresije bez resampliranja (proxy za separabilnost klasa)*
+
+#### Sintetički datasetovi (7) — generiraju se kroz `data/generate_synthetic.py`
+
+| Dataset | n | d | IR | Šum | Što izolira |
+|---|---|---|---|---|---|
+| synth_low_ir | 500 | 10 | 2.0 | 5% | Nizak IR |
+| synth_medium_ir | 500 | 10 | 5.0 | 5% | Srednji IR (default) |
+| synth_high_ir | 500 | 10 | 20.0 | 5% | Visok IR |
+| synth_low_dim | 500 | 3 | 5.0 | 5% | Niska dimenzionalnost |
+| synth_high_dim | 500 | 50 | 5.0 | 5% | Visoka dimenzionalnost (kletva dimenzija) |
+| synth_noisy | 500 | 10 | 5.0 | 15% | Visok šum (preklapanje klasa) |
+| synth_clean | 500 | 10 | 5.0 | 0% | Bez šuma (savršeno separabilno) |
+
+Svaki sintetički skup izolira **jedan kontrolirani faktor** — omogućuje
+analizu "kako se rang-lista SMOTE varijanti mijenja kad promijeniš X".

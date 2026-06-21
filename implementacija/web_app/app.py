@@ -22,6 +22,18 @@ from smote_variants.g_smote import GeometricSMOTE
 from smote_variants.random_smote import RandomSMOTE
 from smote_variants.polynom_fit import PolynomFitSMOTE
 from smote_variants.smote_enn import SMOTEENN, SMOTETomek
+from smote_variants.baselines import (
+    NoOversampling,
+    RandomOversampling,
+    RandomUndersampling,
+)
+from smote_variants.undersampling import (
+    NearMiss1,
+    NearMiss2,
+    NearMiss3,
+    TomekLinks,
+    ENN,
+)
 
 app = FastAPI()
 
@@ -38,6 +50,15 @@ SMOTE_INFO = {
     "G-SMOTE": "Geometrijsko proširenje — generira unutar sektora, ne samo na liniji.",
     "Random-SMOTE": "Nasumični smjer i udaljenost za maksimalnu raznolikost.",
     "PolynomFit-SMOTE": "Polinomna interpolacija kroz više susjeda za nelinearne distribucije.",
+    "NoOversampling": "Bez preuzorkovanja — originalni podaci bez ikakve izmjene (baseline).",
+    "RandomOversampling": "Nasumično dupliciranje manjinskih primjera do balansiranja.",
+    "RandomUndersampling": "Nasumično uklanjanje većinskih primjera do balansiranja.",
+    "NearMiss-1": "Bira većinske primjere najbliže manjinskim (prosječna udaljenost).",
+    "NearMiss-2": "Bira većinske primjere s najmanjom prosječnom udaljenošću do najdaljih manjinskih.",
+    "NearMiss-3": "Za svaki manjinski primjer zadržava k najbližih većinskih susjeda.",
+    "TomekLinks": "Uklanja Tomek Link parove — većinski primjer kojemu je najbliži susjed manjinski i obratno.",
+    "ENN": "Edited Nearest Neighbors — uklanja primjere krivo klasificirane od strane većine susjeda.",
+    "WGAN": "Wasserstein GAN s gradijentnom penalizacijom — generativno preuzorkovanje manjinske klase.",
 }
 
 SMOTE_VARIANTS = {
@@ -53,7 +74,23 @@ SMOTE_VARIANTS = {
     "G-SMOTE": GeometricSMOTE,
     "Random-SMOTE": RandomSMOTE,
     "PolynomFit-SMOTE": PolynomFitSMOTE,
+    "NoOversampling": NoOversampling,
+    "RandomOversampling": RandomOversampling,
+    "RandomUndersampling": RandomUndersampling,
+    "NearMiss-1": NearMiss1,
+    "NearMiss-2": NearMiss2,
+    "NearMiss-3": NearMiss3,
+    "TomekLinks": TomekLinks,
+    "ENN": ENN,
 }
+
+# Lazy import WGAN to avoid torch DLL issues at import time
+def _lazy_wgan_factory(k=None, random_state=None):
+    from smote_variants.gan import WGAN
+    return WGAN(k=k or 5, random_state=random_state)
+
+SMOTE_VARIANTS["WGAN"] = _lazy_wgan_factory
+SMOTE_INFO["WGAN"] = "Wasserstein GAN s gradijentnom penalizacijom — generativno preuzorkovanje manjinske klase."
 
 # --- Static files ---
 with open(os.path.join(os.path.dirname(__file__), "index.html"), "r", encoding="utf-8") as f:

@@ -1,8 +1,8 @@
 import os
 
-SMOTE_K_VALUES = [3, 5, 7, 10]
+SMOTE_K_VALUES = [3, 5]  # 7 i 10 izbaceni — ne donose znacajnu razliku, a udvostrucuju vrijeme
 CV_FOLDS = 5
-CV_REPEATS = 30
+CV_REPEATS = 10  # smanjeno s 30 za brzi run; MLP+SVM izdvojeni u poseban run
 CV_SEED_START = 42
 
 METRICS = ["f1", "g_mean", "auc_roc", "auc_pr", "balanced_accuracy", "mcc", "f2"]

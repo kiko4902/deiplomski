@@ -110,11 +110,15 @@ def load_all_datasets():
     return datasets
 
 
-def print_dataset_summary(datasets):
+def print_dataset_summary(datasets, title="Dataset Summary"):
     """Ispisuje tablicu svih učitanih skupova podataka."""
+    print(f"\n{'='*70}")
+    print(f"  {title}")
+    print(f"{'='*70}")
     print(f"{'Name':25s} {'Samples':>8s} {'Features':>8s} {'IR':>6s} {'Type':>8s}")
     print("-" * 60)
     items = [(name, X, y, meta) for name, (X, y, meta) in datasets.items()]
     items.sort(key=lambda x: (x[3]["type"], -x[3]["ir"]))
     for name, X, y, meta in items:
         print(f"{meta['name']:25s} {meta['n_samples']:8d} {meta['n_features']:8d} {meta['ir']:6.1f} {meta['type']:>8s}")
+    print("-" * 60)

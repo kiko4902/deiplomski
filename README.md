@@ -31,10 +31,11 @@ Rad se sastoji od:
 └── implementacija/
     ├── config.py               # Centralna konfiguracija
     ├── requirements.txt        # Python ovisnosti
-    ├── run_analysis.py         # Glavna skripta za eksperimente
+    ├── run_analysis.py         # Glavna skripta za 5.2 eksperimente
+    ├── run_analysis_53.py      # Skripta za 5.3 eksperimente
     ├── compare_with_imblearn.py # Usporedba s referentnom bibliotekom
     │
-    ├── smote_variants/         # 11 SMOTE algoritama (from-scratch)
+    ├── smote_variants/         # 21 metoda resampliranja
     │   ├── base.py             # BaseSMOTE apstraktna klasa
     │   ├── smote.py            # SMOTE (Chawla 2002)
     │   ├── borderline.py       # Borderline-SMOTE BS1/BS2 (Han 2005)
@@ -45,14 +46,18 @@ Rad se sastoji od:
     │   ├── smote_enn.py        # SMOTE-ENN + SMOTE-Tomek (Batista 2004)
     │   ├── g_smote.py          # Geometric SMOTE (Douzas 2019)
     │   ├── random_smote.py     # Random SMOTE (Dong 2011)
-    │   └── polynom_fit.py      # Polynom-Fit SMOTE (Gazzah 2008)
+    │   ├── polynom_fit.py      # Polynom-Fit SMOTE (Gazzah 2008)
+    │   ├── baselines.py        # NoOversampling, RandomOver/Under-sampling
+    │   ├── undersampling.py    # NearMiss-1/2/3, TomekLinks, ENN
+    │   └── gan.py              # WGAN-GP generativno preuzorkovanje
     │
     ├── evaluation/             # Evaluacijski okvir
     │   ├── metrics.py          # 7 metrika (F1, G-Mean, AUC-ROC/PR, BA, MCC, F2)
     │   ├── cross_validator.py  # 5-fold stratificirani CV ×30 ponavljanja
-    │   └── experiment_runner.py # Orkestrator eksperimenata
+    │   ├── experiment_runner.py # Orkestrator za 5.2 (grid svih kombinacija)
+    │   └── experiment_runner_53.py # Orkestrator za 5.3 (fokusirani parovi)
     │
-    ├── classifiers/defaults.py # 8 klasifikatora (DT, RF, XGBoost, LR, SVM, kNN, GNB, MLP)
+    ├── classifiers/defaults.py # 8 klasifikatora + _weighted varijante
     ├── data/generate_synthetic.py # Generator podataka + ugrađeni datasetovi
     │
     ├── analysis/               # Statistička analiza i vizualizacija
@@ -63,7 +68,7 @@ Rad se sastoji od:
     │   ├── app.py              # Backend API + server
     │   └── index.html          # Frontend (dark tema, 3 moda: single/compare/all)
     │
-    └── tests/                  # Testovi (51 test, svi prolaze)
+    └── tests/                  # Testovi (90 passing + 5 WGAN skipped)
         ├── test_smote_variants.py
         ├── test_metrics.py
         └── test_pipeline.py
@@ -115,12 +120,17 @@ Sva poglavlja su trenutno u "prvoj verziji" — sadrže **planove/upute** što n
 ### Prioritet: Eksperimenti
 1. Dodati **stvarne datasetove** u `data/real/` (trenutno su samo ugrađeni iz sklearn-a)
 2. Pokrenuti `run_analysis.py` sa svim algoritmima, klasifikatorima i k-vrijednostima
-3. Generirati sve tablice i grafove za rad pomoću `analysis/` modula
+3. Pokrenuti `run_analysis_53.py` za 5.3 usporedbu paradigmi
+4. Generirati sve tablice i grafove za rad pomoću `analysis/` modula
 
-### Prijedlozi za poboljšanja
-- Dodati `make_dataset.py` za učitavanje vanjskih CSV skupova
-- Dodati baseline metode u evaluaciju (bez preuzorkovanja, random over/under)
-- Dodati XGBoost u web sučelje
+### Gotovo (implementacija)
+- ✅ 12 SMOTE varijanti (from-scratch)
+- ✅ 5 undersampling metoda (NearMiss 1-3, TomekLinks, ENN)
+- ✅ 3 baseline metode (NoOversampling, ROS, RUS)
+- ✅ WGAN-GP generativno preuzorkovanje
+- ✅ Classifier s class_weight='balanced' varijantama
+- ✅ Dva eksperimentalna bloka (5.2 grid, 5.3 fokusirani)
+- ✅ Web sučelje s 21 metodom
 
 ## Ključne napomene
 

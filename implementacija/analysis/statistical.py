@@ -114,7 +114,7 @@ def wilcoxon_vs_baseline(df, metric="f1", baseline="SMOTE"):
 
 
 def run_all_statistical_tests(metric="f1", baseline="SMOTE"):
-    """Pokreće sva tri statistička testa za jednu metriku."""
+    """Pokreće sva tri statistička testa za jednu metriku i sprema tablice."""
     df = load_all_results()
     print(f"\n{'='*60}")
     print(f"  Statistical Analysis — {metric.upper()}")
@@ -141,6 +141,11 @@ def run_all_statistical_tests(metric="f1", baseline="SMOTE"):
             sig = "***" if res["p_value"] < 0.001 else "**" if res["p_value"] < 0.01 else "*" if res["p_value"] < 0.05 else ""
             print(f"  {algo:25s}  p={res['p_value']:.4f} {sig}")
 
+    # Save all tables
+    save_ranking_table(df, metric)
+    save_pvalue_table(posthoc)
+    save_wilcoxon_table(wilcox, baseline)
+
     return stat, p_val, posthoc, wilcox
 
 
@@ -158,3 +163,76 @@ def save_ranking_table(df, metric="f1", filename="avg_rankings.tex"):
         f.write("\\bottomrule\n")
         f.write("\\end{tabular}\n")
     print(f"  Saved ranking table to {filepath}")
+
+
+def save_pvalue_table(posthoc, alpha=0.05, filename="nemenyi_pvalues.tex"):
+    """Sprema Nemenyi post-hoc p-vrijednosti kao LaTeX tablicu."""
+    if posthoc is None:
+        print("  No posthoc results to save.")
+        return
+
+    os.makedirs(TABLES_DIR, exist_ok=True)
+    filepath = os.path.join(TABLES_DIR, filename)
+
+    algos = posthoc.columns.tolist()
+    n = len(algos)
+    max_name = max(len(a) for a in algos) if algos else 10
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        col_spec = "l" + "c" * n
+        f.write(f"\\begin{{tabular}}{{{col_spec}}}\n")
+        f.write("\\toprule\n")
+        f.write(" & " + " & ".join(algos) + " \\\\\n")
+        f.write("\\midrule\n")
+        for i, a1 in enumerate(algos):
+            row = [a1]
+            for j, a2 in enumerate(algos):
+                if i == j:
+                    row.append("---")
+                else:
+                    p = posthoc.iloc[i, j]
+                    if p < 0.001:
+                        row.append("\\textbf{<0.001}")
+                    elif p < 0.01:
+                        row.append(f"\\textbf{{{p:.3f}}}")
+                    elif p < alpha:
+                        row.append(f"\\textit{{{p:.3f}}}")
+                    else:
+                        row.append(f"{p:.3f}")
+            f.write(" & ".join(row) + " \\\\\n")
+        f.write("\\bottomrule\n")
+        f.write("\\end{tabular}\n")
+    print(f"  Saved p-value table to {filepath}")
+
+
+def save_wilcoxon_table(wilcox_results, baseline="SMOTE", filename="wilcoxon_vs_baseline.tex"):
+    """Sprema Wilcoxon vs baseline rezultate kao LaTeX tablicu."""
+    if not wilcox_results:
+        print("  No Wilcoxon results to save.")
+        return
+
+    os.makedirs(TABLES_DIR, exist_ok=True)
+    filepath = os.path.join(TABLES_DIR, filename)
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write("\\begin{tabular}{lrrl}\n")
+        f.write("\\toprule\n")
+        f.write(f"Algoritam (vs {baseline}) & Statistika & p-vrijednost & Značajnost \\\\\n")
+        f.write("\\midrule\n")
+        for algo, res in sorted(wilcox_results.items()):
+            stat = res["statistic"]
+            p = res["p_value"]
+            if np.isnan(p):
+                sig = ""
+            elif p < 0.001:
+                sig = "***"
+            elif p < 0.01:
+                sig = "**"
+            elif p < 0.05:
+                sig = "*"
+            else:
+                sig = "n.s."
+            f.write(f"{algo} & {stat:.1f} & {p:.4f} & {sig} \\\\\n")
+        f.write("\\bottomrule\n")
+        f.write("\\end{tabular}\n")
+    print(f"  Saved Wilcoxon table to {filepath}")

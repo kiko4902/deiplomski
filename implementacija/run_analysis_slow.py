@@ -1,7 +1,6 @@
-"""Glavna skripta za pokretanje svih eksperimenata — 5.2 SMOTE analiza."""
+"""Poseban run za spore klasifikatore (MLP i SVM) — nakon sto glavni run zavrsi."""
 
 import sys
-import numpy as np
 from datetime import datetime
 from config import SMOTE_K_VALUES, METRICS
 from evaluation.experiment_runner import run_experiment
@@ -19,22 +18,15 @@ SMOTE_ALL = [
 
 BASELINE_ALL = {"NoOversampling", "RandomOversampling", "RandomUndersampling"}
 
-CLASSIFIERS_ALL = ["dt", "rf", "lr", "svm", "knn", "gnb", "mlp"]
-
-# Brzi klasifikatori za glavni run (MLP i SVM su prespori za overnight)
-CLASSIFIERS_FAST = ["rf", "lr", "dt", "knn", "gnb", "xgboost"]
-# Spori klasifikatori — pokrenuti odvojeno: python run_analysis_slow.py
-CLASSIFIERS_SLOW = ["svm", "mlp"]
-
 
 def main():
     use_smote = sys.argv[1:] if len(sys.argv) > 1 else SMOTE_ALL
-    use_classifiers = CLASSIFIERS_FAST
+    use_classifiers = ["svm", "mlp"]
     k_vals = SMOTE_K_VALUES
-    skip_datasets = {"breast_cancer", "wine", "iris"}  # vec gotovi, trivijalni IR
+    skip_datasets = set()  # za SVM/MLP ne preskacemo nista
 
     print("=" * 60)
-    print("  SMOTE Experimental Analysis — 5.2")
+    print("  SMOTE Experimental Analysis — SLOW classifiers (SVM + MLP)")
     print(f"  Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
 
@@ -52,7 +44,7 @@ def main():
 
     n_k_baseline = sum(1 for s in use_smote if s in BASELINE_ALL)
     n_k_smote = len(use_smote) - n_k_baseline
-    expected_rows = (n_k_smote * len(k_vals) + n_k_baseline * 1) * len(use_classifiers) * (len(datasets) - len(skip_datasets)) * len(METRICS)
+    expected_rows = (n_k_smote * len(k_vals) + n_k_baseline * 1) * len(use_classifiers) * len(datasets) * len(METRICS)
 
     from config import CV_FOLDS, CV_REPEATS
     print(f"\n[3] Running experiments...")
@@ -60,13 +52,13 @@ def main():
     print(f"    Classifiers:    {len(use_classifiers)} ({', '.join(use_classifiers)})")
     print(f"    k values:       {k_vals}")
     print(f"    CV:             {CV_FOLDS}-fold x {CV_REPEATS} repeats = {CV_FOLDS * CV_REPEATS} fits/comb")
-    print(f"    Datasets:       {len(datasets) - len(skip_datasets)} ({len(real) - len(skip_datasets & set(real))} real + {len(synth)} synthetic), {len(skip_datasets)} skipped")
+    print(f"    Datasets:       {len(datasets)} ({len(real)} real + {len(synth)} synthetic)")
     print(f"    Expected rows:  {expected_rows}")
     print()
 
     for name, (X, y, meta) in datasets.items():
         if name in skip_datasets:
-            print(f"\n--- {name} SKIPPED (vec gotov) ---")
+            print(f"\n--- {name} SKIPPED ---")
             continue
         source = meta.get("source", meta.get("type", "?"))
         print(f"\n--- {name} ({meta['n_samples']} samples, d={meta['n_features']}, IR={meta['ir']:.1f}, [{source}]) ---")
@@ -79,7 +71,6 @@ def main():
 
     print("\n" + "=" * 60)
     print(f"  Done. Finished: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("  Results saved in results/raw/")
     print("=" * 60)
 
 

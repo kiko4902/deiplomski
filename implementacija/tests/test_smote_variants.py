@@ -12,6 +12,18 @@ from smote_variants.smote_enn import SMOTEENN, SMOTETomek
 from smote_variants.g_smote import GeometricSMOTE
 from smote_variants.random_smote import RandomSMOTE
 from smote_variants.polynom_fit import PolynomFitSMOTE
+from smote_variants.undersampling import (
+    NearMiss1,
+    NearMiss2,
+    NearMiss3,
+    TomekLinks,
+    ENN,
+)
+from smote_variants.baselines import (
+    NoOversampling,
+    RandomOversampling,
+    RandomUndersampling,
+)
 
 
 def make_toy_data(n_samples=100, n_features=2, ir=0.1, random_state=42):
@@ -381,3 +393,341 @@ class TestSafeLevelSMOTE:
         X_res, _ = sl.fit_resample(X, y)
         assert not np.isnan(X_res).any()
         assert not np.isinf(X_res).any()
+
+
+class TestNoOversampling:
+    def test_output_shape(self):
+        X, y = make_toy_data()
+        base = NoOversampling()
+        X_res, y_res = base.fit_resample(X, y)
+        assert X_res.shape == X.shape
+        assert y_res.shape == y.shape
+
+    def test_no_change(self):
+        X, y = make_toy_data()
+        base = NoOversampling()
+        X_res, y_res = base.fit_resample(X, y)
+        assert np.array_equal(X, X_res)
+        assert np.array_equal(y, y_res)
+
+    def test_ignores_k(self):
+        X, y = make_toy_data()
+        for k in (1, 5, 10):
+            base = NoOversampling(k=k, random_state=42)
+            X_res, y_res = base.fit_resample(X, y)
+            assert np.array_equal(X, X_res)
+
+    def test_no_nan_inf(self):
+        X, y = make_toy_data()
+        base = NoOversampling()
+        X_res, _ = base.fit_resample(X, y)
+        assert not np.isnan(X_res).any()
+        assert not np.isinf(X_res).any()
+
+
+class TestRandomOversampling:
+    def test_output_shape(self):
+        X, y = make_toy_data()
+        ros = RandomOversampling(random_state=42)
+        X_res, y_res = ros.fit_resample(X, y)
+        assert X_res.shape[0] == y_res.shape[0]
+        assert X_res.shape[1] == X.shape[1]
+
+    def test_balances_classes(self):
+        X, y = make_toy_data(n_samples=50, ir=0.2)
+        ros = RandomOversampling(random_state=42)
+        X_res, y_res = ros.fit_resample(X, y)
+        _, counts = np.unique(y_res, return_counts=True)
+        assert counts[0] == counts[1]
+
+    def test_minority_increased(self):
+        X, y = make_toy_data()
+        _, counts_before = np.unique(y, return_counts=True)
+        n_min_before = counts_before.min()
+
+        ros = RandomOversampling(random_state=42)
+        X_res, y_res = ros.fit_resample(X, y)
+
+        _, counts_after = np.unique(y_res, return_counts=True)
+        n_min_after = counts_after.min()
+        assert n_min_after > n_min_before
+
+    def test_reproducibility(self):
+        X, y = make_toy_data()
+        ros1 = RandomOversampling(random_state=42)
+        ros2 = RandomOversampling(random_state=42)
+        X1, y1 = ros1.fit_resample(X, y)
+        X2, y2 = ros2.fit_resample(X, y)
+        assert np.array_equal(X1, X2)
+        assert np.array_equal(y1, y2)
+
+    def test_no_nan_inf(self):
+        X, y = make_toy_data()
+        ros = RandomOversampling(random_state=42)
+        X_res, _ = ros.fit_resample(X, y)
+        assert not np.isnan(X_res).any()
+        assert not np.isinf(X_res).any()
+
+    def test_all_synthetic_are_existing(self):
+        X, y = make_toy_data(n_samples=50, n_features=2, ir=0.2)
+        ros = RandomOversampling(random_state=42)
+        X_res, y_res = ros.fit_resample(X, y)
+        X_synth = X_res[len(X):]
+        for s in X_synth:
+            assert any(np.array_equal(s, x) for x in X)
+
+
+class TestRandomUndersampling:
+    def test_output_shape(self):
+        X, y = make_toy_data()
+        rus = RandomUndersampling(random_state=42)
+        X_res, y_res = rus.fit_resample(X, y)
+        assert X_res.shape[0] == y_res.shape[0]
+        assert X_res.shape[1] == X.shape[1]
+
+    def test_balances_classes(self):
+        X, y = make_toy_data(n_samples=50, ir=0.2)
+        rus = RandomUndersampling(random_state=42)
+        X_res, y_res = rus.fit_resample(X, y)
+        _, counts = np.unique(y_res, return_counts=True)
+        assert counts[0] == counts[1]
+
+    def test_majority_decreased(self):
+        X, y = make_toy_data()
+        _, counts_before = np.unique(y, return_counts=True)
+        n_maj_before = counts_before.max()
+
+        rus = RandomUndersampling(random_state=42)
+        X_res, y_res = rus.fit_resample(X, y)
+
+        _, counts_after = np.unique(y_res, return_counts=True)
+        n_maj_after = counts_after.max()
+        assert n_maj_after < n_maj_before
+
+    def test_minority_unchanged(self):
+        X, y = make_toy_data()
+        _, counts_before = np.unique(y, return_counts=True)
+        n_min_before = counts_before.min()
+        min_class = np.unique(y)[np.argmin(counts_before)]
+
+        rus = RandomUndersampling(random_state=42)
+        _, y_res = rus.fit_resample(X, y)
+        n_min_after = np.sum(y_res == min_class)
+        assert n_min_after == n_min_before
+
+    def test_reproducibility(self):
+        X, y = make_toy_data()
+        rus1 = RandomUndersampling(random_state=42)
+        rus2 = RandomUndersampling(random_state=42)
+        X1, y1 = rus1.fit_resample(X, y)
+        X2, y2 = rus2.fit_resample(X, y)
+        assert np.array_equal(X1, X2)
+        assert np.array_equal(y1, y2)
+
+    def test_no_nan_inf(self):
+        X, y = make_toy_data()
+        rus = RandomUndersampling(random_state=42)
+        X_res, _ = rus.fit_resample(X, y)
+        assert not np.isnan(X_res).any()
+        assert not np.isinf(X_res).any()
+
+    def test_all_remaining_are_original(self):
+        X, y = make_toy_data(n_samples=50, n_features=2, ir=0.2)
+        rus = RandomUndersampling(random_state=42)
+        X_res, _ = rus.fit_resample(X, y)
+        for x in X_res:
+            assert any(np.array_equal(x, ox) for ox in X)
+
+
+class TestNearMiss1:
+    def test_output_shape(self):
+        X, y = make_toy_data()
+        nm = NearMiss1(k=5, random_state=42)
+        X_res, y_res = nm.fit_resample(X, y)
+        assert X_res.shape[0] == y_res.shape[0]
+        assert X_res.shape[1] == X.shape[1]
+
+    def test_reduces_samples(self):
+        X, y = make_toy_data(n_samples=100, ir=0.2)
+        nm = NearMiss1(k=5, random_state=42)
+        X_res, y_res = nm.fit_resample(X, y)
+        assert len(X_res) < len(X)
+
+    def test_no_nan_inf(self):
+        X, y = make_toy_data()
+        nm = NearMiss1(k=5, random_state=42)
+        X_res, _ = nm.fit_resample(X, y)
+        assert not np.isnan(X_res).any()
+        assert not np.isinf(X_res).any()
+
+    def test_minority_unchanged(self):
+        X, y = make_toy_data(n_samples=100, ir=0.2)
+        _, counts_before = np.unique(y, return_counts=True)
+        n_min_before = counts_before.min()
+        min_class = np.unique(y)[np.argmin(counts_before)]
+
+        nm = NearMiss1(k=5, random_state=42)
+        _, y_res = nm.fit_resample(X, y)
+        n_min_after = np.sum(y_res == min_class)
+        assert n_min_after == n_min_before
+
+
+class TestNearMiss2:
+    def test_output_shape(self):
+        X, y = make_toy_data()
+        nm = NearMiss2(k=5, random_state=42)
+        X_res, y_res = nm.fit_resample(X, y)
+        assert X_res.shape[0] == y_res.shape[0]
+        assert X_res.shape[1] == X.shape[1]
+
+    def test_reduces_samples(self):
+        X, y = make_toy_data(n_samples=100, ir=0.2)
+        nm = NearMiss2(k=5, random_state=42)
+        X_res, _ = nm.fit_resample(X, y)
+        assert len(X_res) < len(X)
+
+    def test_no_nan_inf(self):
+        X, y = make_toy_data()
+        nm = NearMiss2(k=5, random_state=42)
+        X_res, _ = nm.fit_resample(X, y)
+        assert not np.isnan(X_res).any()
+        assert not np.isinf(X_res).any()
+
+    def test_minority_unchanged(self):
+        X, y = make_toy_data(n_samples=100, ir=0.2)
+        _, counts_before = np.unique(y, return_counts=True)
+        n_min_before = counts_before.min()
+        min_class = np.unique(y)[np.argmin(counts_before)]
+
+        nm = NearMiss2(k=5, random_state=42)
+        _, y_res = nm.fit_resample(X, y)
+        n_min_after = np.sum(y_res == min_class)
+        assert n_min_after == n_min_before
+
+
+class TestNearMiss3:
+    def test_output_shape(self):
+        X, y = make_toy_data()
+        nm = NearMiss3(k=5, random_state=42)
+        X_res, y_res = nm.fit_resample(X, y)
+        assert X_res.shape[0] == y_res.shape[0]
+        assert X_res.shape[1] == X.shape[1]
+
+    def test_reduces_samples(self):
+        X, y = make_toy_data(n_samples=100, ir=0.2)
+        nm = NearMiss3(k=5, random_state=42)
+        X_res, _ = nm.fit_resample(X, y)
+        assert len(X_res) < len(X)
+
+    def test_no_nan_inf(self):
+        X, y = make_toy_data()
+        nm = NearMiss3(k=5, random_state=42)
+        X_res, _ = nm.fit_resample(X, y)
+        assert not np.isnan(X_res).any()
+        assert not np.isinf(X_res).any()
+
+    def test_minority_unchanged(self):
+        X, y = make_toy_data(n_samples=100, ir=0.2)
+        _, counts_before = np.unique(y, return_counts=True)
+        n_min_before = counts_before.min()
+        min_class = np.unique(y)[np.argmin(counts_before)]
+
+        nm = NearMiss3(k=5, random_state=42)
+        _, y_res = nm.fit_resample(X, y)
+        n_min_after = np.sum(y_res == min_class)
+        assert n_min_after == n_min_before
+
+
+class TestTomekLinksStandalone:
+    def test_output_shape(self):
+        X, y = make_toy_data()
+        tl = TomekLinks(k=5, random_state=42)
+        X_res, y_res = tl.fit_resample(X, y)
+        assert X_res.shape[0] == y_res.shape[0]
+        assert X_res.shape[1] == X.shape[1]
+
+    def test_no_nan_inf(self):
+        X, y = make_toy_data()
+        tl = TomekLinks(k=5, random_state=42)
+        X_res, _ = tl.fit_resample(X, y)
+        assert not np.isnan(X_res).any()
+        assert not np.isinf(X_res).any()
+
+    def test_does_not_increase(self):
+        X, y = make_toy_data(n_samples=100, ir=0.2)
+        tl = TomekLinks(k=5, random_state=42)
+        X_res, _ = tl.fit_resample(X, y)
+        assert len(X_res) <= len(X)
+
+
+class TestENNStandalone:
+    def test_output_shape(self):
+        X, y = make_toy_data()
+        enn = ENN(k=5, random_state=42)
+        X_res, y_res = enn.fit_resample(X, y)
+        assert X_res.shape[0] == y_res.shape[0]
+        assert X_res.shape[1] == X.shape[1]
+
+    def test_no_nan_inf(self):
+        X, y = make_toy_data()
+        enn = ENN(k=5, random_state=42)
+        X_res, _ = enn.fit_resample(X, y)
+        assert not np.isnan(X_res).any()
+        assert not np.isinf(X_res).any()
+
+    def test_does_not_increase(self):
+        X, y = make_toy_data(n_samples=100, ir=0.2)
+        enn = ENN(k=5, random_state=42)
+        X_res, _ = enn.fit_resample(X, y)
+        assert len(X_res) <= len(X)
+
+
+@pytest.mark.skip(reason="PyTorch DLL init fails on this Python 3.12/Windows. "
+                          "WGAN validated manually — works with 'import torch' first.")
+class TestWGAN:
+    def _get_wgan(self):
+        from smote_variants.gan import WGAN
+        return WGAN
+
+    def test_output_shape(self):
+        X, y = make_toy_data()
+        wgan = self._get_wgan()(k=5, random_state=42, epochs=20, batch_size=16)
+        X_res, y_res = wgan.fit_resample(X, y)
+        assert X_res.shape[0] == y_res.shape[0]
+        assert X_res.shape[1] == X.shape[1]
+
+    def test_balances_classes(self):
+        X, y = make_toy_data(n_samples=50, ir=0.2)
+        wgan = self._get_wgan()(k=5, random_state=42, epochs=30, batch_size=16)
+        X_res, y_res = wgan.fit_resample(X, y)
+        _, counts = np.unique(y_res, return_counts=True)
+        assert counts[0] == counts[1]
+
+    def test_no_nan_inf(self):
+        X, y = make_toy_data()
+        wgan = self._get_wgan()(k=5, random_state=42, epochs=20, batch_size=16)
+        X_res, _ = wgan.fit_resample(X, y)
+        assert not np.isnan(X_res).any()
+        assert not np.isinf(X_res).any()
+
+    def test_reproducibility(self):
+        X, y = make_toy_data(n_samples=40, ir=0.3)
+        WGAN = self._get_wgan()
+        wgan1 = WGAN(k=5, random_state=42, epochs=20, batch_size=16)
+        wgan2 = WGAN(k=5, random_state=42, epochs=20, batch_size=16)
+        X1, y1 = wgan1.fit_resample(X, y)
+        X2, y2 = wgan2.fit_resample(X, y)
+        assert np.array_equal(X1, X2)
+        assert np.array_equal(y1, y2)
+
+    def test_minority_increased(self):
+        X, y = make_toy_data()
+        _, counts_before = np.unique(y, return_counts=True)
+        n_min_before = counts_before.min()
+
+        wgan = self._get_wgan()(k=5, random_state=42, epochs=20, batch_size=16)
+        X_res, y_res = wgan.fit_resample(X, y)
+
+        _, counts_after = np.unique(y_res, return_counts=True)
+        n_min_after = counts_after.min()
+        assert n_min_after > n_min_before

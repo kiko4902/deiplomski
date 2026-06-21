@@ -81,3 +81,51 @@ class TestPipeline:
         assert "SMOTE" in smote_names_found
         assert "Borderline-SMOTE1" in smote_names_found
         assert "ADASYN" in smote_names_found
+
+    def test_baselines_in_pipeline(self):
+        X, y = make_toy_dataset()
+        df = run_experiment(
+            X, y, "toy_baseline",
+            classifier_names=["rf"],
+            smote_names=["NoOversampling", "RandomOversampling", "RandomUndersampling"],
+            k_values=[3, 5],
+        )
+        assert df is not None
+        assert len(df) > 0
+        names = df["smote"].unique()
+        assert "NoOversampling" in names
+        assert "RandomOversampling" in names
+        assert "RandomUndersampling" in names
+
+    def test_baselines_single_k_row(self):
+        X, y = make_toy_dataset()
+        df = run_experiment(
+            X, y, "toy_bsingle",
+            classifier_names=["rf"],
+            smote_names=["NoOversampling", "SMOTE"],
+            k_values=[3, 5, 7],
+        )
+        k_vals_no = df[df["smote"] == "NoOversampling"]["k"].unique()
+        k_vals_smote = df[df["smote"] == "SMOTE"]["k"].unique()
+        assert len(k_vals_no) == 1
+        assert k_vals_no[0] == 0
+        assert len(k_vals_smote) == 3
+
+
+class TestWeightedClassifiers:
+    def test_all_weighted_instantiate(self):
+        from classifiers.defaults import get_classifier
+        names = ["dt_weighted", "rf_weighted", "lr_weighted", "svm_weighted", "mlp_weighted"]
+        for name in names:
+            clf = get_classifier(name)
+            assert clf is not None
+
+    def test_all_weighted_fit_predict(self):
+        from classifiers.defaults import get_classifier
+        X, y = make_toy_dataset()
+        names = ["dt_weighted", "rf_weighted", "lr_weighted", "svm_weighted", "mlp_weighted"]
+        for name in names:
+            clf = get_classifier(name)
+            clf.fit(X, y)
+            y_pred = clf.predict(X)
+            assert len(y_pred) == len(y)

@@ -9,3 +9,6 @@ scikit-posthocs>=0.7
 streamlit>=1.10
 plotly>=5.0
 pytest>=7.0
+torch>=2.0
+fastapi>=0.100
+uvicorn>=0.22
