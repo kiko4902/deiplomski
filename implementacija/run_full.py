@@ -4,11 +4,11 @@ Procijenjeno trajanje: 8-12 sati.
 """
 
 import sys, os
-from datetime import datetime
 sys.path.insert(0, os.path.dirname(__file__))
 
 import config
-config.SMOTE_K_VALUES = [3, 5, 7]
+config.SMOTE_K_VALUES.clear()
+config.SMOTE_K_VALUES.extend([3, 5, 7])
 config.CV_REPEATS = 30
 
 from evaluation.experiment_runner import run_experiment

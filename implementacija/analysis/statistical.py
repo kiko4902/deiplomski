@@ -21,7 +21,8 @@ def load_all_results():
 def compute_avg_rankings(df, metric="f1"):
     """Računa prosječni rang svakog SMOTE algoritma kroz sve skupove i klasifikatore."""
     metric_df = df[df["metric"] == metric].copy()
-    groupings = metric_df.groupby(["dataset", "classifier", "k"])
+    best_k = metric_df.groupby(["dataset", "classifier", "smote"])["mean"].max().reset_index()
+    groupings = best_k.groupby(["dataset", "classifier"])
     rankings = []
 
     for _, group in groupings:
@@ -35,15 +36,17 @@ def compute_avg_rankings(df, metric="f1"):
 
 
 def compute_rank_matrix(df, metric="f1"):
-    """Vraća matricu rangova: redovi = (dataset, classifier, k), stupci = SMOTE varijante."""
+    """Vraća matricu rangova: redovi = (dataset, classifier), stupci = SMOTE varijante.
+    Za svaku metodu uzima se NAJBOLJI k (maksimalni mean)."""
     metric_df = df[df["metric"] == metric].copy()
-    pivot = metric_df.pivot_table(
-        index=["dataset", "classifier", "k"],
+    # Agregiraj po najboljem k za svaku kombinaciju
+    best_k = metric_df.groupby(["dataset", "classifier", "smote"])["mean"].max().reset_index()
+    pivot = best_k.pivot_table(
+        index=["dataset", "classifier"],
         columns="smote",
         values="mean",
         aggfunc="first",
     )
-
     rank_matrix = pivot.rank(axis=1, ascending=False)
     return rank_matrix
 
@@ -51,6 +54,7 @@ def compute_rank_matrix(df, metric="f1"):
 def friedman_test(df, metric="f1"):
     """Friedmanov test — postoje li značajne razlike među algoritmima?"""
     rank_matrix = compute_rank_matrix(df, metric)
+    rank_matrix = rank_matrix.dropna(axis=1, how="any").dropna(axis=0, how="any")
     smote_variants = rank_matrix.columns.tolist()
     if len(smote_variants) < 2:
         return None, None, None
@@ -67,13 +71,13 @@ def nemenyi_posthoc(df, metric="f1"):
         return None
 
     long_form = rank_matrix.reset_index().melt(
-        id_vars=["dataset", "classifier", "k"],
+        id_vars=["dataset", "classifier"],
         var_name="smote",
         value_name="rank",
     )
 
     pivot_ranks = long_form.pivot_table(
-        index=["dataset", "classifier", "k"],
+        index=["dataset", "classifier"],
         columns="smote",
         values="rank",
     )
@@ -90,8 +94,9 @@ def nemenyi_posthoc(df, metric="f1"):
 def wilcoxon_vs_baseline(df, metric="f1", baseline="SMOTE"):
     """Wilcoxon signed-rank test uspoređuje svaku izvedenicu s baselineom."""
     metric_df = df[df["metric"] == metric].copy()
-    pivot = metric_df.pivot_table(
-        index=["dataset", "classifier", "k"],
+    best_k = metric_df.groupby(["dataset", "classifier", "smote"])["mean"].max().reset_index()
+    pivot = best_k.pivot_table(
+        index=["dataset", "classifier"],
         columns="smote",
         values="mean",
         aggfunc="first",
@@ -101,12 +106,16 @@ def wilcoxon_vs_baseline(df, metric="f1", baseline="SMOTE"):
         return {}
 
     results = {}
-    baseline_vals = pivot[baseline].values
+    baseline_vals_all = pivot[baseline]
     for algo in pivot.columns:
         if algo == baseline:
             continue
         try:
-            stat, p_val = wilcoxon(baseline_vals, pivot[algo].values)
+            mask = baseline_vals_all.notna() & pivot[algo].notna()
+            if mask.sum() < 3:
+                results[algo] = {"statistic": np.nan, "p_value": np.nan}
+                continue
+            stat, p_val = wilcoxon(baseline_vals_all[mask], pivot[algo][mask])
             results[algo] = {"statistic": stat, "p_value": p_val}
         except Exception:
             results[algo] = {"statistic": np.nan, "p_value": np.nan}
