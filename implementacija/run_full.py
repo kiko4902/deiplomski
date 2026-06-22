@@ -4,6 +4,7 @@ Procijenjeno trajanje: 8-12 sati.
 """
 
 import sys, os
+from datetime import datetime
 sys.path.insert(0, os.path.dirname(__file__))
 
 import config
@@ -23,7 +24,7 @@ SMOTE_ALL = [
     "NoOversampling", "RandomOversampling", "RandomUndersampling",
 ]
 
-ALL_CLASSIFIERS = ["dt", "rf", "lg", "svm", "knn", "gnb", "mlp", "xgboost"]
+ALL_CLASSIFIERS = ["dt", "rf", "lr", "svm", "knn", "gnb", "mlp", "xgboost"]
 
 print("=" * 60)
 print("  FINAL RUN — Full Configuration")
