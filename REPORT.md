@@ -12,277 +12,375 @@
 | Undersampling | NearMiss-1, NearMiss-2, NearMiss-3, Tomek Links, Edited Nearest Neighbors (ENN) | 5 |
 | Baseline | NoOversampling, RandomOversampling, RandomUndersampling | 3 |
 
-Sve SMOTE implementacije su from-scratch, pisane prema originalnim radovima. Biblioteka `imbalanced-learn` koristi se isključivo za validaciju (usporedba rezultata) i učitavanje datasetova.
+Sve SMOTE implementacije su from-scratch prema originalnim radovima. Biblioteka `imbalanced-learn` koristi se isključivo za validaciju i učitavanje datasetova.
 
-**Validacija implementacije:**
-- 90/95 testova prolazi (5 WGAN testova preskočeno — nema PyTorch)
-- Usporedba s imbalanced-learn: 5/8 algoritama daje identičan broj sintetičkih uzoraka
-- Reproducibilnost: isti seed → identični rezultati
-- Web sučelje (FastAPI + Plotly) za interaktivnu vizualizaciju svih varijanti
+**Validacija:** 90/95 testova prolazi (5 WGAN preskočeno — nema PyTorch). Usporedba s imbalanced-learn: 5/8 algoritama daje identičan broj sintetičkih uzoraka.
 
 ### Eksperimentalna postavka
 
 | Parametar | Vrijednost | Obrazloženje |
 |-----------|-----------|--------------|
-| k (broj susjeda) | 3, 5, 7 | Chawla 2002 preporučuje k=5; testirano i 3 i 7 |
-| CV | 5-fold stratificirani × 10 (×30 za full run) | Standard u literaturi (Demšar 2006) |
-| Klasifikatori | DT, RF, XGBoost, LR, SVM, kNN, GNB, MLP | 8 klasifikatora različitih familija |
-| Metrike | F1, G-Mean, AUC-ROC, AUC-PR, Balanced Accuracy, MCC, F2 | 7 metrika |
+| k | 3, 5, 7 | Chawla 2002 preporučuje k=5 |
+| CV | 5-fold strat. × 10 (full run × 30) | Standard (Demšar 2006) |
+| Klasifikatori | DT, RF, XGBoost, LR, SVM, kNN, GNB, MLP | 8 različitih familija |
+| Metrike | F1, G-Mean, AUC-ROC (+ AUC-PR, BA, MCC, F2) | 7 metrika |
 | Skupovi | 11 stvarnih + 7 sintetičkih | IR 1.7–28.1, d 3–100 |
-| Statistika | Friedman + Nemenyi + Wilcoxon | Demšar 2006 metodologija |
-| Ukupno | 20 metode × 8 klas. × 18 dataseta × 7 metrika = 54,432 reda | Full run gotov |
+| Statistika | Friedman + Nemenyi + Wilcoxon | Demšar 2006 |
+| Ukupno | 20 × 8 × 18 × 7 = **54,432 reda** | Full run gotov |
 
 ---
 
 ## 2. Opis svakog algoritma
 
-### 2.1. SMOTE — Synthetic Minority Over-sampling Technique (Chawla 2002)
+### SMOTE varijante (oversampling)
 
-**Osnovna ideja:** Umjesto dupliciranja postojećih manjinskih primjera (što dovodi do overfittinga), SMOTE generira nove, sintetičke primjere linearnom interpolacijom između postojećih manjinskih uzoraka.
+#### SMOTE — Synthetic Minority Over-sampling Technique (Chawla 2002)
 
-**Kako funkcionira:** Za svaki primjer manjinske klase pronalazi se k najbližih susjeda (Euklidska udaljenost). Slučajno se bira jedan susjed i generira novi primjer na dužini koja ih spaja: x_new = x_i + λ(x_nn − x_i), gdje je λ ~ U(0,1). Postupak se ponavlja dok se klase ne izbalansiraju.
+**Ideja:** Umjesto dupliciranja postojećih manjinskih primjera (overfitting), generira nove linearne interpolacije. **Kako:** Za svaki manjinski primjer nađe k najbližih susjeda → nasumično bira jednog → generira na dužini: x_new = x_i + λ(x_nn − x_i), λ ~ U(0,1).
 
-**Zaključak iz eksperimenta:** SMOTE je robustan i konzistentan — rank #4 globalno za F1 (0.7493). Niti jedna varijanta ga ne nadmašuje univerzalno, iako specifične varijante pobjeđuju u specifičnim scenarijima.
-
----
-
-### 2.2. Borderline-SMOTE (Han 2005)
-
-**Osnovna ideja:** Nisu svi manjinski primjeri jednako važni — oni na granici odluke su ključni. Algoritam se fokusira samo na "opasne" (danger) primjere.
-
-**Kako funkcionira:** Svaki manjinski primjer kategorizira se prema broju većinskih susjeda: Safe, Danger ili Noise. BS1 preuzorkuje samo Danger primjere koristeći manjinske susjede. BS2 dopušta i većinske susjede ali s λ ∈ (0, 0.5) — generira bliže manjinskoj strani.
-
-**Zaključak:** Rank #12-13 globalno. Lošiji od SMOTE-a na većini datasetova (p<0.001), ali može pomoći na specifičnim skupovima s jasnom granicom (wine_quality: +0.006 vs SMOTE).
+**Naši rezultati:** Rank #4 F1 (0.749), #5 G-Mean (0.822), #7 AUC-ROC (0.894). Robustan, nikad #1 ali uvijek u vrhu. Delta vs baseline: +0.031 F1, +0.141 G-Mean, +0.025 AUC-ROC.
 
 ---
 
-### 2.3. ADASYN — Adaptive Synthetic Sampling (He 2008)
+#### Borderline-SMOTE (Han 2005)
 
-**Osnovna ideja:** Generirati više sintetičkih primjera u područjima gdje je većinska klasa gušća — tamo gdje je klasifikacija najteža.
+**Ideja:** Nisu svi primjeri jednako važni — granični su ključni. **Kako:** Kategorizira manjinske u Safe/Danger/Noise prema broju većinskih susjeda. BS1 preuzorkuje samo Danger s manjinskim susjedima. BS2 dopušta i većinske uz λ∈(0,0.5).
 
-**Kako funkcionira:** Računa se omjer Γ_i = broj većinskih susjeda / k za svaki manjinski primjer. Normalizira se u distribuciju i ukupni broj sintetičkih primjera se raspoređuje proporcionalno — više uzoraka u "teškim" područjima.
-
-**Zaključak:** Rank #11 globalno. Konzistentno lošiji od SMOTE-a (p<0.001). Problem: outlieri dobivaju najviše sintetičkih primjera, pojačavajući šum.
+**Naši rezultati:** Rank #12-13 F1, #8-10 G-Mean, #10-11 AUC-ROC. Konzistentno lošiji od SMOTE-a (p<0.001). Fokus na granične često pojačava šum.
 
 ---
 
-### 2.4. SafeLevel-SMOTE (Bunkhumpornpat 2009)
+#### ADASYN — Adaptive Synthetic Sampling (He 2008)
 
-**Osnovna ideja:** Generirati sintetičke primjere samo u "sigurnim" područjima gdje ima dovoljno manjinskih susjeda — izbjeći generiranje u šumu.
+**Ideja:** Više sintetičkih primjera tamo gdje je većinska klasa gušća. **Kako:** Računa Γ_i = #većinskih susjeda/k, normalizira u distribuciju, raspoređuje ukupni broj sintetičkih proporcionalno.
 
-**Kako funkcionira:** Sigurnosna razina (safe-level) = broj manjinskih susjeda među k najbližih. Novi primjer pozicionira se bliže onom s višom sigurnosnom razinom. Ako su oba u nesigurnom području, generiranje se preskače.
-
-**Zaključak:** Rank #3 globalno — iznenađujuće dobar! Jedna od rijetkih varijanti koje su konzistentno u vrhu. Konzervativan pristup se isplati — izbjegavanje šuma daje stabilne rezultate.
+**Naši rezultati:** Rank #11 F1, #7 G-Mean, #9 AUC-ROC. Lošiji od SMOTE-a (p<0.001). Problem: outlieri dobivaju najviše sintetičkih.
 
 ---
 
-### 2.5. KMeans-SMOTE (Douzas 2018)
+#### SafeLevel-SMOTE (Bunkhumpornpat 2009)
 
-**Osnovna ideja:** Riješiti problem unutar-klasnog disbalansa — manjinska klasa često nije homogena, nego se sastoji od manjih podgrupa (klastera).
+**Ideja:** Generiraj samo u "sigurnim" područjima — suprotno od Borderline/ADASYN. **Kako:** Sigurnosna razina = #manjinskih susjeda. Ako oba u nesigurnom → preskoči. Novi primjer bliže sigurnijem.
 
-**Kako funkcionira:** K-Means grupira manjinske primjere. Rijetki klasteri dobivaju proporcionalno više sintetičkih primjera (težinski ~ 1/veličina_klastera). SMOTE se primjenjuje unutar svakog klastera zasebno.
-
-**Zaključak:** Rank #8 globalno. Bolji od SMOTE-a na high-IR datasetovima (yeast_me2: +0.011, us_crime: +0.017). Posebno koristan kad manjinska klasa ima više podgrupa.
+**Naši rezultati:** Rank #3 F1, #4 G-Mean, #6 AUC-ROC. **Iznenađujuće dobar!** Konzervativan pristup = stabilnost. Bolji od Borderline i ADASYN na svim metrikama.
 
 ---
 
-### 2.6. SVM-SMOTE (Nguyen 2011)
+#### KMeans-SMOTE (Douzas 2018)
 
-**Osnovna ideja:** Generirati sintetičke primjere samo oko potpornih vektora — točaka koje definiraju granicu odluke.
+**Ideja:** Riješiti unutar-klasni disbalans — manjinska klasa nije homogena. **Kako:** KMeans grupira manjinske → rijetki klasteri dobiju više sintetičkih (težina ∝ 1/veličina) → SMOTE unutar svakog klastera zasebno.
 
-**Kako funkcionira:** Trenira se SVM na originalnim podacima. Izdvajaju se potporni vektori manjinske klase. Novi primjeri generiraju se duž linija koje spajaju potporne vektore s njihovim susjedima.
-
-**Zaključak:** Rank #7 globalno. Sličan SMOTE-u ukupno, ali zahtijeva treniranje SVM-a (dodatni trošak). Koristan kad je granica odluke jasna.
+**Naši rezultati:** Rank #8 F1, #14 G-Mean, #13 AUC-ROC. Pomaže na high-IR: yeast_me2 +0.011, us_crime +0.017 vs SMOTE.
 
 ---
 
-### 2.7. SMOTE-ENN (Batista 2004)
+#### SVM-SMOTE (Nguyen 2011)
 
-**Osnovna ideja:** Kombinirati preuzorkovanje s naknadnim čišćenjem — prvo generirati, pa ukloniti šumne primjere.
+**Ideja:** Generiraj samo oko potpornih vektora (točaka na granici). **Kako:** SVM → izdvoji potporne vektore manjinske → SMOTE samo na njima. Preciznije od Borderline/ADASYN u identifikaciji granice, ali sporije i ovisi o kvaliteti SVM-a.
 
-**Kako funkcionira:** SMOTE → ENN (Edited Nearest Neighbors): uklanja svaki primjer kojeg većina njegovih k-NN susjeda pogrešno klasificira. Agresivno čišćenje.
-
-**Zaključak:** Rank #10 globalno. Bolji od SMOTE-a na abalone (+0.027), ali generalno agresivno brisanje smanjuje performanse.
+**Naši rezultati:** Rank #7 F1, #6 G-Mean, #8 AUC-ROC. Bolji od Borderline/ADASYN, ali ne nadmašuje SMOTE.
 
 ---
 
-### 2.8. SMOTE-Tomek (Batista 2004)
+#### SMOTE-ENN (Batista 2004)
 
-**Osnovna ideja:** SMOTE + uklanjanje Tomek Link parova — blago čišćenje granice odluke.
+**Ideja:** Preuzorkuj pa očisti — prvo generiraj, onda ukloni šum. **Kako:** SMOTE → ENN: za SVAKI primjer gleda njegovih k susjeda — ako većina pripada drugoj klasi → briše ga. Briše i originalne i sintetičke, i manjinske i većinske.
 
-**Kako funkcionira:** SMOTE → uklanjanje Tomek Linkova (parova različitih klasa koji su međusobno najbliži susjedi). Manje agresivno od ENN-a.
-
-**Zaključak:** Rank #2 globalno! Jedna od najboljih varijanti. Konzistentno u top 3 kroz sve eksperimente. Blago čišćenje + SMOTE = pouzdana kombinacija.
+**Naši rezultati:** Rank #10 F1, ali **#1 G-Mean i #1 AUC-ROC!** Agresivno čišćenje popravlja separabilnost klasa (G-Mean, AUC-ROC) ali pogoršava preciznost (F1 pad). Najbolji na šumnim sintetičkim podacima (synth_noisy +0.032).
 
 ---
 
-### 2.9. G-SMOTE — Geometric SMOTE (Douzas 2019)
+#### SMOTE-Tomek (Batista 2004)
 
-**Osnovna ideja:** Osnovni SMOTE generira samo na liniji između dvije točke — G-SMOTE proširuje generiranje na cijeli geometrijski sektor.
+**Ideja:** Blaža verzija SMOTE-ENN — čisti samo Tomek Link parove. **Kako:** SMOTE → ukloni Tomek Linkove (dva primjera različitih klasa, međusobno najbliži). Puno manje brisanja od ENN-a.
 
-**Kako funkcionira:** Generira unutar višedimenzionalnog sektora definiranog manjinskim primjerom i smjerom prema susjedu. Kontrolira se faktorom deformacije α (udaljenost od linije) i faktorom skraćivanja. Veća raznolikost sintetičkih uzoraka.
-
-**Zaključak:** Rank #9 globalno. Teorijski najnaprednija varijanta, ali u praksi ne nadmašuje SMOTE. Pomaže kod visokodimenzionalnih podataka (libras_move, d=90).
+**Naši rezultati:** Rank #2 F1, #3 G-Mean, #5 AUC-ROC. **Konzistentno u top 3!** Blago čišćenje + SMOTE = najpouzdanija kombinacija.
 
 ---
 
-### 2.10. Random-SMOTE (Dong 2011)
+#### G-SMOTE — Geometric SMOTE (Douzas 2019)
 
-**Osnovna ideja:** Umjesto interpolacije prema susjedu, potpuno nasumičan smjer i udaljenost — maksimalna raznolikost.
+**Ideja:** Ne generiraj samo na liniji — generiraj u cijelom geometrijskom sektoru. **Kako:** Generira unutar višedimenzionalnog sektora s faktorom deformacije α i skraćivanja. Veća raznolikost.
 
-**Kako funkcionira:** Za svaki manjinski primjer nasumično se bira smjer (jedinični vektor) i udaljenost. Nema veze sa susjedima.
-
-**Zaključak:** Rank #5 globalno — iznenađujuće visoko! Najbolji na HIGH IR datasetovima (+0.011 vs SMOTE). Jednostavan, a efektivan.
+**Naši rezultati:** Rank #9 F1, #11 G-Mean, **#2 AUC-ROC!** Geometrijska raznolikost pomaže rank-based metrike (AUC-ROC) ali šteti precision-based (F1). Na optical_digits (d=64): +0.034 AUC-ROC vs SMOTE. Na RF-u gubi -0.020 F1.
 
 ---
 
-### 2.11. PolynomFit-SMOTE (Gazzah 2008)
+#### Random-SMOTE (Dong 2011)
 
-**Osnovna ideja:** Linearna interpolacija (2 točke) je prejednostavna — polinom kroz više točaka bolje prati nelinearne distribucije.
+**Ideja:** Potpuno nasumičan smjer i udaljenost — maksimalna raznolikost. **Kako:** Za svaki manjinski primjer nasumično bira smjer (jedinični vektor) i udaljenost. Nema veze sa susjedima.
 
-**Kako funkcionira:** Koristi polinomnu interpolaciju kroz više susjeda (degree=2 ili 3) umjesto linearnog segmenta između dvije točke.
-
-**Zaključak:** Rank #1 globalno! Iako malo citiran u literaturi (~40 citata), u našim eksperimentima se pokazao kao najbolji za F1 (0.7508). Ovo je neočekivan i zanimljiv nalaz.
+**Naši rezultati:** Rank #5 F1, #12 G-Mean, #4 AUC-ROC. **Najbolji na HIGH IR** (+0.011 F1 vs SMOTE). Posebno dobar na SVM-u (+0.014 F1). Jednostavan, a efektivan.
 
 ---
 
-### 2.12. WGAN — Wasserstein GAN (u razvoju)
+#### PolynomFit-SMOTE (Gazzah 2008)
 
-**Osnovna ideja:** Koristiti generativnu suprotstavljenu mrežu za stvaranje visokokvalitetnih sintetičkih primjera manjinske klase, umjesto jednostavne interpolacije.
+**Ideja:** Linearna interpolacija (2 točke) je prejednostavna — polinom kroz više točaka. **Kako:** Polinomna interpolacija kroz više susjeda (degree 2-3) umjesto linearnog segmenta.
 
-**Kako funkcionira:** WGAN se sastoji od generatora (stvara sintetičke uzorke) i kritičara (procjenjuje koliko su uvjerljivi). Wasserstein udaljenost pruža stabilnije treniranje od klasičnog GAN-a. Generator uči stvarnu distribuciju manjinske klase i generira nove uzorke iz nje.
-
-**Izazovi u odnosu na SMOTE:**
-1. Zahtijeva **PyTorch** i GPU za efikasno treniranje (ili dugo CPU vrijeme)
-2. **Mala količina podataka** — manjinska klasa često ima premalo uzoraka za treniranje GAN-a (<100)
-3. **Mode collapse** — generator može proizvoditi uvijek iste uzorke
-4. **Overfitting** na malom broju uzoraka — GAN nauči kopirati originale umjesto generalizirati
-5. **Nestabilno treniranje** — zahtijeva pažljivo podešavanje hiperparametara
-6. Računski **10-100× sporije** od SMOTE-a
-
-**Status:** Implementacija u `smote_variants/gan.py`. U početnom stanju razvoja. Nije uključena u glavne eksperimente. Odluka o uključivanju u konačnu verziju rada ovisit će o vremenu.
+**Naši rezultati:** **Rank #1 F1 (0.751), #2 G-Mean, #3 AUC-ROC!** Neočekivano najbolji, iako slabo citiran (~40 citata). Konzistentno u top 3 na sve metrike.
 
 ---
 
-## 3. Ključni rezultati
+### Undersampling algoritmi
 
-### 3.1. Globalni ranking (F1, svih 18 datasetova, svih 8 klasifikatora)
+#### NearMiss-1 (Mani & Zhang 2003)
 
-| # | Algoritam | F1 | vs Baseline |
-|---|-----------|-----|-------------|
-| 1 | **PolynomFit-SMOTE** | 0.7508 | +0.032 |
-| 2 | **SMOTE-Tomek** | 0.7496 | +0.031 |
-| 3 | SafeLevel-SMOTE | 0.7493 | +0.031 |
-| 4 | **SMOTE** | 0.7493 | +0.031 |
-| 5 | **Random-SMOTE** | 0.7487 | +0.030 |
-| 15 | NoOversampling | 0.7187 | — |
-| 18 | NearMiss-3 | 0.6568 | -0.062 |
-| 19 | NearMiss-2 | 0.5778 | -0.141 |
-| 20 | NearMiss-1 | 0.5732 | -0.146 |
+**Ideja:** Zadrži većinske primjere koji su najbliži manjinskoj klasi — oni su najinformativniji. **Kako:** Za svaki većinski primjer računa prosječnu udaljenost do 3 najbliža manjinska. Zadržava N većinskih s najmanjom udaljenošću.
 
-**Ključni nalaz:** Top 5 su unutar 0.002 F1 — svi praktički identični. Ali SMOTE konzistentno poboljšava baseline (NoOversampling) za +0.031 F1. NearMiss poduzorkovanje je katastrofalno — gubitak 0.14 F1.
+**Naši rezultati:** Rank #20 F1 (0.573), #18 G-Mean, #20 AUC-ROC. **Najgori algoritam ukupno.** Čuva samo granične većinske — ekstremno gubi informacije.
 
-### 3.2. Po metrici
+---
 
-| Metrika | SMOTE | Baseline | Delta | Friedman p |
-|---------|-------|----------|-------|-------------|
-| F1 | 0.749 | 0.719 | **+0.031** | <0.001 |
-| G-Mean | 0.822 | 0.681 | **+0.141** | <0.001 |
-| AUC-ROC | 0.894 | 0.869 | **+0.025** | <0.001 |
+#### NearMiss-2 (Mani & Zhang 2003)
 
-**Ključni nalaz:** SMOTE najviše pomaže G-Mean-u (+0.141) jer izravno poboljšava balans između osjetljivosti i specifičnosti. F1 poboljšanje je skromnije (+0.031) jer SMOTE ponekad smanjuje preciznost.
+**Ideja:** Zadrži većinske primjere koji su najudaljeniji od manjinske klase. **Kako:** Za svaki većinski primjer računa prosječnu udaljenost do 3 NAJDALJA manjinska. Zadržava N većinskih s najvećom udaljenošću.
 
-### 3.3. Po IR grupi (F1)
+**Naši rezultati:** Rank #19 F1 (0.578), #16 G-Mean, #19 AUC-ROC. Malo bolji od NM-1, i dalje vrlo loš.
 
+---
+
+#### NearMiss-3 (Mani & Zhang 2003)
+
+**Ideja:** Zadrži većinske primjere koji su najbliži SVIM manjinskim. **Kako:** Za svaki manjinski primjer zadržava M najbližih većinskih. "Svaki manjinski dobije svoje većinske susjede."
+
+**Naši rezultati:** Rank #18 F1 (0.657), #15 G-Mean, #18 AUC-ROC. Najbolji od tri NearMiss varijante, ali i dalje značajno lošiji od SMOTE-a.
+
+---
+
+#### Tomek Links (samostalno, Tomek 1976)
+
+**Ideja:** Ukloni dvosmislene točke s granice — parove različitih klasa koji su međusobno najbliži. **Kako:** Pronađi sve Tomek Link parove → ukloni oba primjera (ili samo većinski).
+
+**Naši rezultati:** Rank #14 F1 (0.723), #17 G-Mean, #15 AUC-ROC. Samostalno — gubitak informacija. U kombinaciji sa SMOTE-om (SMOTE-Tomek) — odličan (#2 F1).
+
+---
+
+#### Edited Nearest Neighbors — ENN (samostalno, Wilson 1972)
+
+**Ideja:** Ukloni sve primjere okružene "neprijateljima". **Kako:** Za svaki primjer gleda njegovih k susjeda. Ako većina pripada drugoj klasi → briše ga. Iterativno ili jednoprolazno.
+
+**Naši rezultati:** Rank #17 F1 (0.689), #20 G-Mean, #17 AUC-ROC. Samostalno — preagresivno, briše previše. U kombinaciji sa SMOTE-om (SMOTE-ENN) — situacijski odličan (#1 G-Mean, #1 AUC-ROC).
+
+---
+
+### WGAN — Wasserstein GAN (u razvoju)
+
+**Ideja:** Generativna suprotstavljena mreža za stvaranje visokokvalitetnih sintetičkih primjera. **Kako:** Generator stvara uzorke, kritičar procjenjuje. Wasserstein udaljenost daje stabilnije treniranje od klasičnog GAN-a.
+
+**Izazovi vs SMOTE:** (1) Zahtijeva PyTorch i GPU, (2) premalo manjinskih primjera za treniranje GAN-a (<100), (3) mode collapse, (4) overfitting na malom broju uzoraka, (5) nestabilno treniranje, (6) 10-100× sporije.
+
+**Status:** Implementacija u `smote_variants/gan.py`, početno stanje. Nije uključena u glavne eksperimente.
+
+---
+
+## 3. Detaljna analiza — F1, G-Mean, AUC-ROC
+
+Nakon analize svih 7 metrika, fokusiramo se na 3 reprezentativne koje mjere različite aspekte performansi:
+- **F1** — harmonijska sredina preciznosti i odziva (kažnjava lažne pozitive)
+- **G-Mean** — geometrijska sredina odziva i specifičnosti (balans klasa)
+- **AUC-ROC** — površina ispod ROC krivulje (separabilnost, neovisna o pragu)
+
+*(Napomena: F2 je 0.942 koreliran s G-Mean-om, MCC je 0.973 koreliran s F1 — redundantni su. AUC-PR i Balanced Accuracy su u prilogu.)*
+
+---
+
+### 3.1. F1 — Preciznost + Odziv
+
+**Globalni ranking:**
+```
+ 1. PolynomFit-SMOTE          0.751
+ 2. SMOTE-Tomek               0.750
+ 3. SafeLevel-SMOTE           0.749
+ 4. SMOTE                     0.749  ← SMOTE
+ 5. Random-SMOTE              0.749
+...
+15. NoOversampling            0.719  ← Baseline
+...
+20. NearMiss-1                0.573
+```
+
+**Ključni nalazi F1:**
+- Top 5 unutar 0.002 — svi praktički identični
+- SMOTE +0.031 vs baseline — **postoji, ali skromno**
+- NearMiss undersampling je katastrofalan (−0.146)
+
+**Po IR grupi (F1):**
 | IR grupa | SMOTE rank | Tko je bolji? |
 |----------|-----------|---------------|
-| LOW IR (<5) | #4 | **NoOversampling je najbolji** — SMOTE ne pomaže kad su klase skoro balansirane |
-| MED IR (5-15) | #4 | PolynomFit-SMOTE, SMOTE-Tomek — blago bolji |
-| HIGH IR (>15) | #4 | **Random-SMOTE (+0.011)** i **PolynomFit-SMOTE (+0.004)** — mjerljivo bolji |
+| LOW (<5) | #4 | NoOversampling najbolji — SMOTE ne pomaže |
+| MED (5-15) | #4 | PolynomFit, SMOTE-Tomek, SafeLevel |
+| HIGH (>15) | #4 | **Random-SMOTE (+0.011)**, PolynomFit (+0.004) |
 
-### 3.4. Po klasifikatoru — tko pobjeđuje SMOTE?
-
+**Po klasifikatoru (F1) — gdje SMOTE nije najbolji:**
 | Klasifikator | Bolji od SMOTE? |
 |-------------|-----------------|
-| RF, DT, LR, XGBoost | **SMOTE je najbolji** — nitko ga ne pobjeđuje |
+| RF, LR, XGBoost | SMOTE je najbolji |
+| DT | SMOTE-ENN (+0.005) |
 | GNB | ENN (+0.033), TomekLinks (+0.023) |
-| kNN | RandomOversampling (+0.010), Random-SMOTE (+0.010) |
-| MLP | Svi su praktički jednaki |
-| SVM | **Random-SMOTE (+0.014)** — jedini značajan dobitak |
-
-### 3.5. Gdje varijante POMAŽU — per dataset
-
-| Dataset | IR | SMOTE F1 | Najbolja varijanta | Delta |
-|---------|-----|----------|---------------------|-------|
-| yeast_me2 | 28.1 | 0.293 | **KMeans-SMOTE (0.305)** | +0.012 |
-| wine_quality | 25.8 | 0.275 | **Random-SMOTE (0.300)** | +0.025 |
-| us_crime | 12.3 | 0.466 | **KMeans-SMOTE (0.484)** | +0.018 |
-| libras_move | 14.0 | 0.745 | **Random-SMOTE (0.755)** | +0.010 |
-| optical_digits | 9.1 | 0.826 | **Random-SMOTE (0.868)** | +0.042 |
-| abalone | 9.7 | 0.347 | **SMOTE-ENN (0.374)** | +0.027 |
-| synth_noisy | — | 0.887 | **ENN (0.919)** | +0.032 |
-| synth_high_ir | — | 0.918 | **ENN (0.966)** | +0.048 |
-
-**Zaključak:** Na datasetovima sa **šumom** ENN/TomekLinks pobjeđuju (+0.03-0.05). Na **visokom IR** KMeans-SMOTE i Random-SMOTE vode. Na **niskom IR** SMOTE je optimalan.
-
-### 3.6. Gdje SMOTE NE pomaže — per dataset
-
-Na 6/18 datasetova **NoOversampling ≥ SMOTE**:
-- breast_cancer, iris, wine (IR<3)
-- synth_clean, synth_medium_ir, synth_low_dim
-
-**Zaključak:** Kad su klase približno balansirane (IR<3) ili kad nema šuma, SMOTE je suvišan — može čak i smanjiti F1. Ovo je u skladu s literaturom i s tvojim završnim radom (Džoić, 2024).
+| kNN | RandomOversampling (+0.010) |
+| SVM | Random-SMOTE (+0.014) |
+| MLP | Svi jednaki |
 
 ---
 
-## 4. Usporedba s tvojim završnim radom (Džoić, 2024)
+### 3.2. G-Mean — Balans klasa
 
-Tvoj završni rad istraživao je utjecaj parametara k i q na osnovni SMOTE. Ključni nalazi koji se **potvrđuju** u diplomskom:
+**Globalni ranking:**
+```
+ 1. SMOTE-ENN                 0.838
+ 2. PolynomFit-SMOTE          0.825
+ 3. SMOTE-Tomek               0.822
+ 4. SafeLevel-SMOTE           0.822
+ 5. SMOTE                     0.822  ← SMOTE
+...
+19. NoOversampling            0.681  ← Baseline
+20. ENN                       0.618
+```
+
+**Ključni nalazi G-Mean:**
+- SMOTE +0.141 vs baseline — **najveći delta od svih metrika!** SMOTE dramatično popravlja balans klasa
+- SMOTE-ENN #1 — agresivno čišćenje popravlja separabilnost
+
+**Po IR grupi (G-Mean):**
+| IR grupa | SMOTE rank | Tko je bolji? |
+|----------|-----------|---------------|
+| LOW (<5) | **#1** | SMOTE je najbolji! |
+| MED (5-15) | #4 | SMOTE-ENN (+0.015) |
+| HIGH (>15) | #7 | SMOTE-ENN (+0.022), RandomUndersampling (+0.009) |
+
+**Po klasifikatoru (G-Mean) — gdje SMOTE nije najbolji:**
+| Klasifikator | Bolji od SMOTE? |
+|-------------|-----------------|
+| DT | SMOTE-ENN (+0.036) |
+| MLP | Smote-ENN (+0.006), SVM-SMOTE (+0.005), Borderline-SMOTE2 (+0.006) |
+| RF | RandomUndersampling (+0.054), SMOTE-ENN (+0.033) |
+| SVM | RandomUndersampling (+0.018) |
+| XGBoost | SMOTE-ENN (+0.038), RandomUndersampling (+0.037) |
+
+**Zaključak:** SMOTE-ENN i RandomUndersampling dominiraju G-Mean na RF, SVM, XGBoost — metode koje agresivno čiste granicu odluke.
+
+---
+
+### 3.3. AUC-ROC — Separabilnost klasa
+
+**Globalni ranking:**
+```
+ 1. SMOTE-ENN                 0.897
+ 2. G-SMOTE                   0.896
+ 3. PolynomFit-SMOTE          0.895
+ 4. Random-SMOTE              0.895
+ 5. SMOTE-Tomek               0.894
+ 6. SafeLevel-SMOTE           0.894
+ 7. SMOTE                     0.894  ← SMOTE
+...
+16. NoOversampling            0.869  ← Baseline
+...
+20. NearMiss-1                0.752
+```
+
+**Ključni nalazi AUC-ROC:**
+- SMOTE +0.025 vs baseline — umjereno poboljšanje
+- SMOTE je tek #7 — najslabija pozicija na ovoj metrici
+- Top 6 metoda su unutar 0.003 — sve praktički identične u separabilnosti
+
+**Po IR grupi (AUC-ROC):**
+| IR grupa | SMOTE rank | Tko je bolji? |
+|----------|-----------|---------------|
+| LOW (<5) | #2 | SMOTE-Tomek (#1, +0.000) |
+| MED (5-15) | #7 | G-SMOTE (+0.003) |
+| HIGH (>15) | #8 | SMOTE-ENN (+0.006), PolynomFit (+0.004) |
+
+**Po klasifikatoru (AUC-ROC) — gdje SMOTE nije najbolji:**
+| Klasifikator | Bolji od SMOTE? |
+|-------------|-----------------|
+| DT | SMOTE-ENN (+0.024) |
+| GNB | Random-SMOTE (+0.019) |
+| MLP | G-SMOTE (+0.004) |
+| SVM | Random-SMOTE (+0.006), G-SMOTE (+0.004) |
+
+---
+
+## 4. Sažetak ključnih nalaza
+
+### Što SMOTE postiže?
+
+| Metrika | SMOTE | Baseline | Delta | Značaj |
+|---------|-------|----------|-------|--------|
+| F1 | 0.749 | 0.719 | **+0.031** | Skromno |
+| G-Mean | 0.822 | 0.681 | **+0.141** | Dramatično |
+| AUC-ROC | 0.894 | 0.869 | **+0.025** | Umjereno |
+
+### Tri najbolje varijante (konzistentne kroz sve metrike)
+
+| Varijanta | F1 | G-Mean | AUC-ROC | Prosjek |
+|-----------|-----|--------|---------|---------|
+| **PolynomFit-SMOTE** | #1 | #2 | #3 | **#2.0** |
+| **SMOTE-Tomek** | #2 | #3 | #5 | **#3.3** |
+| **SafeLevel-SMOTE** | #3 | #4 | #6 | **#4.3** |
+
+### Koju metodu kada koristiti?
+
+| Situacija | Preporuka |
+|-----------|-----------|
+| Općenito, svi datasetovi | **PolynomFit-SMOTE** ili **SMOTE-Tomek** |
+| Mali IR (<5), čisti podaci | **NoOversampling** — SMOTE je suvišan |
+| Visok IR (>15) | **Random-SMOTE** (F1) ili **SMOTE-ENN** (G-Mean/AUC-ROC) |
+| Šumni podaci | **ENN** ili **SMOTE-ENN** (čisti šum) |
+| RF, XGBoost klasifikator | **SMOTE** je dovoljan |
+| SVM klasifikator | **Random-SMOTE** (+0.014 F1) |
+| Želiš maksimalan G-Mean | **SMOTE-ENN** (+0.016 vs SMOTE) |
+
+### Što NE koristiti?
+
+- **NearMiss 1/2/3** — konzistentno najgori, gube 0.14 F1 vs SMOTE
+- **Samostalni ENN** — preagresivan bez SMOTE-a (gubi 0.06 F1)
+- **Borderline-SMOTE i ADASYN** — lošiji od SMOTE-a u 90% slučajeva
+
+---
+
+## 5. Usporedba sa završnim radom (Džoić, 2024)
 
 | Nalaz iz završnog (2024) | Potvrda u diplomskom (2026) |
 |--------------------------|---------------------------|
-| k=5 optimalno za većinu slučajeva | k=[3,5] dovoljno — k=7 ne donosi značajnu razliku |
+| k=5 optimalno | k=[3,5] dovoljno — k=7 ne donosi razliku |
 | G-Mean raste s preuzorkovanjem, F1 može pasti | G-Mean +0.141, F1 samo +0.031 |
 | SVM i GNB profitiraju najviše | SVM: Random-SMOTE +0.014; GNB: ENN +0.033 |
-| Stablo odluke slabo profitira od SMOTE-a | DT: nitko ne pobjeđuje SMOTE, ali ni SMOTE ne pomaže puno (+0.006 vs baseline) |
-| Parametri ovise o IR-u i klasifikatoru | Potvrđeno na 18 datasetova s 8 klasifikatora |
-
-**Diplomski proširuje završni:** S parametara jednog algoritma → na usporedbu 12 različitih algoritama.
+| Stablo odluke slabo profitira | DT: SMOTE tek +0.006 vs baseline |
+| Parametri ovise o IR i klasifikatoru | Potvrđeno na 18 datasetova s 8 klasifikatora |
+| "Bilo bi korisno istražiti druge SMOTE varijante" | **Upravo to je napravljeno** — 12 varijanti |
 
 ---
 
-## 5. Što još treba napraviti
+## 6. Što još treba
 
-### Prioritet 1 — LaTeX rad (pisanje)
-- [x] Struktura i plan poglavlja — gotovo (prva verzija)
-- [ ] Poglavlje 2: Pretvoriti upute u gotov tekst (20-25 stranica)
-- [ ] Poglavlje 3: Opisi svih SMOTE varijanti + tablica (10-15 str)
-- [ ] Poglavlje 4: Opis implementacije (8-10 str)
-- [ ] Poglavlje 5: Rezultati i diskusija — **ovo je najvažnije** (20-25 str)
+### Prioritet 1 — Pisanje LaTeX rada
+- [x] Struktura i plan poglavlja (prva verzija)
+- [ ] Poglavlje 2: Problem neuravnoteženosti i SMOTE (20-25 str)
+- [ ] Poglavlje 3: Izvedenice i alternativni pristupi (10-15 str)
+- [ ] Poglavlje 4: Programsko rješenje (8-10 str)
+- [ ] Poglavlje 5: Eksperimentalna analiza — **najvažnije** (20-25 str)
 - [ ] Poglavlje 6: Zaključak (2-3 str)
-- [ ] Sažetak, abstract, literatura
 
-### Prioritet 2 — Finalna analiza
-- [x] Full run s 8 klasifikatora — **gotovo**
-- [x] Statistička analiza (Friedman, Nemenyi, Wilcoxon) — **gotovo**
-- [x] Vizualizacije (boxplot, violin, CD, heatmap, per-dataset bars) — **gotovo**
-- [ ] Analiza po k-vrijednostima (3 vs 5 vs 7) iz full runa
-- [ ] Odluka: hoće li WGAN ući u rad
+### Prioritet 2 — Završna analiza
+- [x] Full run (8 klasifikatora) — gotovo
+- [x] Statistička analiza — gotovo
+- [x] Vizualizacije — gotovo (F:\results\figures\)
+- [x] LaTeX tablice — gotovo (F:\results\tables\)
 
 ### Prioritet 3 — Opcionalno
-- [ ] WGAN: dovršiti implementaciju i evaluaciju (zahtijeva PyTorch, GPU)
-- [ ] Parcijalno balansiranje (ne samo 1:1) — iz završnog rada
-- [ ] Cross-validacija specifična po datasetu (npr. LOOCV za male skupove)
+- [ ] WGAN dovršetak (zahtijeva PyTorch)
+- [ ] Parcijalno balansiranje (ne 1:1)
 
 ---
 
-## 6. Struktura za prezentaciju mentoru (5 min)
+## 7. Struktura za 5-minutnu prezentaciju
 
-1. **Što sam napravio** (30s): 20 metoda, 8 klasifikatora, 18 datasetova, 7 metrika, 54k redova rezultata
-2. **Tri ključna nalaza** (2min):
-   - SMOTE je robustan — nijedna varijanta ga ne nadmašuje univerzalno
-   - Ali specifične varijante pomažu u specifičnim scenarijima (ENN za šum, KMeans-SMOTE za visok IR, Random-SMOTE za SVM)
-   - NearMiss poduzorkovanje je konzistentno loše
+1. **Što sam napravio** (30s): 20 metoda, 8 klasifikatora, 18 datasetova, 7 metrika, 54k redova
+2. **Ključni nalazi** (2min):
+   - SMOTE +0.141 G-Mean, +0.031 F1, +0.025 AUC-ROC — pomaže, ali metrika određuje koliko
+   - Top 3 varijante: PolynomFit-SMOTE, SMOTE-Tomek, SafeLevel-SMOTE
+   - NearMiss poduzorkovanje je beskorisno
 3. **Demo** (1min): Web sučelje s 12 varijanti
-4. **Status i plan** (1min): Full run gotov, analiza gotova, treba napisati tekst
-5. **WGAN** (30s): U razvoju, opcionalno — izazovi s malom količinom podataka
+4. **Status** (1min): Full run gotov, analiza gotova, treba napisati tekst
+5. **WGAN** (30s): U razvoju, opcionalno
